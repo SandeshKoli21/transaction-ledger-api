@@ -3,6 +3,11 @@ const { AppError } = require('./errors');
 
 const isStr = (v) => typeof v === 'string' && v.trim().length > 0;
 
+function checkReferenceId(ref, errors) {
+  if (!isStr(ref)) errors.push('reference_id is required');
+  else if (ref.trim().length > 100) errors.push('reference_id must be at most 100 characters');
+}
+
 function fail(errors) {
   if (errors.length) throw new AppError(400, 'VALIDATION_ERROR', 'Invalid request data', { errors });
 }
@@ -33,7 +38,7 @@ function transaction(body) {
   const errors = [];
   if (!['credit', 'debit'].includes(body.type)) errors.push("type must be either 'credit' or 'debit'");
   checkAmount(body.amount, errors);
-  if (!isStr(body.reference_id)) errors.push('reference_id is required');
+  checkReferenceId(body.reference_id, errors);
   checkOptionalDescription(body.description, errors);
   fail(errors);
   return { type: body.type, amount: body.amount, description: body.description ?? null, reference_id: body.reference_id.trim() };
@@ -45,7 +50,7 @@ function transfer(body) {
   if (!isStr(body.to_account_id)) errors.push('to_account_id is required');
   if (isStr(body.from_account_id) && body.from_account_id === body.to_account_id) errors.push('cannot transfer to the same account');
   checkAmount(body.amount, errors);
-  if (!isStr(body.reference_id)) errors.push('reference_id is required');
+  checkReferenceId(body.reference_id, errors);
   checkOptionalDescription(body.description, errors);
   fail(errors);
   return { ...body, description: body.description ?? null, reference_id: body.reference_id.trim() };
@@ -61,7 +66,7 @@ function pagination(query) {
     if (max && Number(raw) > max) { errors.push(`${name} must be at most ${max}`); return undefined; }
     return Number(raw);
   };
-  out.page = intParam('page') ?? 1;
+  out.page = intParam('page', 1e6) ?? 1;
   out.limit = intParam('limit', 100) ?? 10;
   const type = query.get('type');
   if (type !== null) {

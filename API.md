@@ -12,11 +12,14 @@ Base URL: `http://localhost:3000` · All requests and responses are JSON.
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Missing/invalid fields or query params (`details.errors` lists each problem) |
 | 400 | `INVALID_BODY` | Body is not valid JSON or not an object |
+| 400 | `INVALID_PATH` | URL contains invalid percent-encoding (e.g. `%E0%A4%A`) |
 | 404 | `ACCOUNT_NOT_FOUND` | Account ID does not exist |
 | 404 | `NOT_FOUND` | Unknown route |
 | 405 | `METHOD_NOT_ALLOWED` | e.g. PUT/DELETE on transactions (they are immutable) |
 | 409 | `DUPLICATE_TRANSACTION` | `reference_id` already used on this account |
+| 413 | `PAYLOAD_TOO_LARGE` | Request body larger than 1 MB |
 | 422 | `INSUFFICIENT_BALANCE` | Debit/transfer larger than the balance |
+| 422 | `BALANCE_LIMIT_EXCEEDED` | Credit/transfer would push a balance above 10,000,000,000,000 |
 | 500 | `INTERNAL_ERROR` | Unexpected server error |
 
 ---
@@ -46,8 +49,8 @@ Errors: `400` if `name` is missing, or if `balance`, `id` or `created_at` is sen
 | Field | Rules |
 |---|---|
 | `type` | required, `credit` or `debit` |
-| `amount` | required number, > 0, max 2 decimals |
-| `reference_id` | required, unique per account |
+| `amount` | required number, > 0, max 2 decimals, max 1,000,000,000,000 |
+| `reference_id` | required, unique per account, max 100 characters |
 | `description` | optional string, max 500 |
 
 **201 Created**
@@ -58,7 +61,7 @@ Errors: `400` if `name` is missing, or if `balance`, `id` or `created_at` is sen
   "balance": 150
 }
 ```
-Errors: `400`, `404`, `409` (balance unchanged, `details.transaction` is the original), `422` (balance unchanged).
+Errors: `400`, `404`, `409` (balance unchanged, `details.transaction` is the original), `422` (`INSUFFICIENT_BALANCE` or `BALANCE_LIMIT_EXCEEDED`, balance unchanged).
 
 ---
 
@@ -79,7 +82,7 @@ Errors: `404`.
 | Param | Default | Rules |
 |---|---|---|
 | `type` | both | `credit` or `debit` |
-| `page` | 1 | positive integer |
+| `page` | 1 | positive integer, max 1,000,000 |
 | `limit` | 10 | positive integer, max 100 |
 
 Sorted latest first by `created_at`.

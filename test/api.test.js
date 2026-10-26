@@ -151,3 +151,37 @@ test('unknown route returns 404 JSON', async () => {
   assert.equal(r.status, 404);
   assert.equal(r.body.error.code, 'NOT_FOUND');
 });
+
+test('huge page number returns 400, not a server error', async () => {
+  const a = await newAccount();
+  const r = await call('GET', `/accounts/${a.id}/transactions?page=99999999999999999999`);
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error.code, 'VALIDATION_ERROR');
+});
+
+test('malformed percent-encoding in URL returns 400, not a server error', async () => {
+  const r = await call('GET', '/accounts/%E0%A4%A/balance');
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error.code, 'INVALID_PATH');
+});
+
+test('body over 1MB returns 413', async () => {
+  const r = await call('POST', '/accounts', JSON.stringify({ name: 'a'.repeat(2e6) }));
+  assert.equal(r.status, 413);
+  assert.equal(r.body.error.code, 'PAYLOAD_TOO_LARGE');
+});
+
+test('balance cannot grow past the safe limit; balance unchanged', async () => {
+  const a = await newAccount();
+  for (let i = 0; i < 10; i++) assert.equal((await tx(a.id, 'credit', 1e12, `big${i}`)).status, 201);
+  const r = await tx(a.id, 'credit', 0.01, 'big-over');
+  assert.equal(r.status, 422);
+  assert.equal(r.body.error.code, 'BALANCE_LIMIT_EXCEEDED');
+  assert.equal((await call('GET', `/accounts/${a.id}/balance`)).body.balance, 1e13);
+});
+
+test('reference_id longer than 100 characters is rejected', async () => {
+  const a = await newAccount();
+  const r = await tx(a.id, 'credit', 1, 'x'.repeat(101));
+  assert.equal(r.status, 400);
+});

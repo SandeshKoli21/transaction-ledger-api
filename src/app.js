@@ -11,11 +11,18 @@ function send(res, status, body) {
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let data = '';
+    let tooLarge = false;
     req.on('data', (c) => {
+      if (tooLarge) return; // keep draining the upload but stop buffering it
       data += c;
-      if (data.length > 1e6) reject(new AppError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large'));
+      if (data.length > 1e6) {
+        tooLarge = true;
+        data = '';
+        reject(new AppError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large'));
+      }
     });
     req.on('end', () => {
+      if (tooLarge) return;
       if (!data) return resolve({});
       try {
         const parsed = JSON.parse(data);
@@ -29,6 +36,14 @@ function readJson(req) {
     });
     req.on('error', reject);
   });
+}
+
+function decodeParam(p) {
+  try {
+    return decodeURIComponent(p);
+  } catch {
+    throw new AppError(400, 'INVALID_PATH', 'URL contains invalid percent-encoding');
+  }
 }
 
 function createApp(ledger) {
@@ -50,7 +65,7 @@ function createApp(ledger) {
       const route = matches.find(([m]) => m === req.method);
       // No PUT/PATCH/DELETE routes exist, so transactions cannot be edited or deleted.
       if (!route) throw new AppError(405, 'METHOD_NOT_ALLOWED', `${req.method} is not allowed on this route`);
-      const params = route[1].exec(url.pathname).slice(1).map(decodeURIComponent);
+      const params = route[1].exec(url.pathname).slice(1).map(decodeParam);
       const [status, body] = await route[2](req, params, url);
       send(res, status, body);
     } catch (err) {

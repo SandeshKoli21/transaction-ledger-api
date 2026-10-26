@@ -6,6 +6,8 @@ const { AppError } = require('./errors');
 const toMinor = (amount) => Math.round(amount * 100);
 const toMajor = (minor) => minor / 100;
 const now = () => new Date().toISOString();
+// Keeps every balance well inside JavaScript's exact-integer range (2^53 paise).
+const MAX_BALANCE_MINOR = 1e15;
 
 function createLedger(db) {
   let seq = Number(db.prepare('SELECT COALESCE(MAX(seq),0) AS s FROM transactions').get().s);
@@ -66,6 +68,10 @@ function createLedger(db) {
         { balance: toMajor(current), requested: amount });
     }
     const next = type === 'credit' ? current + minor : current - minor;
+    if (next > MAX_BALANCE_MINOR) {
+      throw new AppError(422, 'BALANCE_LIMIT_EXCEEDED', 'This credit would take the balance past the maximum allowed',
+        { balance: toMajor(current), requested: amount, max_balance: toMajor(MAX_BALANCE_MINOR) });
+    }
 
     const tx = {
       id: crypto.randomUUID(), account_id: accountId, type, amount: minor,
